@@ -23,7 +23,37 @@ namespace bustub {
 
 template <typename K, typename V>
 ExtendibleHashTable<K, V>::ExtendibleHashTable(size_t bucket_size)
-    : global_depth_(0), bucket_size_(bucket_size), num_buckets_(1) {}
+    : global_depth_(0), bucket_size_(bucket_size), num_buckets_(1) {
+  dir_.push_back(std::make_shared<Bucket>(bucket_size, 0));
+}
+
+template <typename K, typename V>
+auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void {
+  auto bucket_0 = std::make_shared<Bucket>(bucket_size_, bucket->GetDepth() + 1);
+  auto bucket_1 = std::make_shared<Bucket>(bucket_size_, bucket->GetDepth() + 1);
+  
+  int mask = 1 << bucket->GetDepth();
+  
+  // 重新分配原bucket中的元素
+  for (const auto &item : bucket->GetItems()) {
+    size_t hash_key = std::hash<K>()(item.first);
+    if ((hash_key & mask) == 0) {
+      bucket_0->Insert(item.first, item.second);
+    } else {
+      bucket_1->Insert(item.first, item.second);
+    }
+  }
+  num_buckets_++;
+  for (size_t i = 0; i < dir_.size(); i++) {
+    if (dir_[i] == bucket) {
+      if ((i & mask) == 0) {
+        dir_[i] = bucket_0;
+      } else {
+        dir_[i] = bucket_1;
+      }
+    }
+  }
+}
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::IndexOf(const K &key) -> size_t {
@@ -66,17 +96,36 @@ auto ExtendibleHashTable<K, V>::GetNumBucketsInternal() const -> int {
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Find(const K &key, V &value) -> bool {
-  UNREACHABLE("not implemented");
+  std::scoped_lock<std::mutex> lock(latch_);
+  size_t index = IndexOf(key);
+  return dir_[index]->Find(key, value);
 }
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Remove(const K &key) -> bool {
-  UNREACHABLE("not implemented");
+  std::scoped_lock<std::mutex> lock(latch_);
+  size_t index = IndexOf(key);
+  return dir_[index]->Remove(key);
 }
 
 template <typename K, typename V>
 void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
-  UNREACHABLE("not implemented");
+  std::scoped_lock<std::mutex> lock(latch_);
+  auto index = IndexOf(key);
+  auto bucket = dir_[index];
+  while (!dir_[IndexOf(key)]->Insert(key, value)) {
+    if (bucket->GetDepth() == GetGlobalDepthInternal()) {
+      global_depth_++;
+      int size = dir_.size();
+      dir_.resize(size << 1);
+      for (int i = 0; i < size; i++){
+        dir_[i + size] = dir_[i];
+      }
+    }
+    RedistributeBucket(bucket);
+    index = IndexOf(key);
+    bucket = dir_[index];
+  }
 }
 
 //===--------------------------------------------------------------------===//
