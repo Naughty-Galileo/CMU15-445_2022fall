@@ -31,9 +31,9 @@ template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void {
   auto bucket_0 = std::make_shared<Bucket>(bucket_size_, bucket->GetDepth() + 1);
   auto bucket_1 = std::make_shared<Bucket>(bucket_size_, bucket->GetDepth() + 1);
-  
+
   int mask = 1 << bucket->GetDepth();
-  
+
   // 重新分配原bucket中的元素
   for (const auto &item : bucket->GetItems()) {
     size_t hash_key = std::hash<K>()(item.first);
@@ -118,7 +118,7 @@ void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
       global_depth_++;
       int size = dir_.size();
       dir_.resize(size << 1);
-      for (int i = 0; i < size; i++){
+      for (int i = 0; i < size; i++) {
         dir_[i + size] = dir_[i];
       }
     }
